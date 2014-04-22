@@ -103,8 +103,6 @@ class BubbleGraph
 
 
     render: (svg, fill, id='#bubble') ->
-        console.log "Rendering"
-
         @dom = svg.append("g")
             .attr("id", id)
             .attr("class", "timeline")
@@ -114,8 +112,6 @@ class BubbleGraph
             .enter().append("g")
             .attr("class", "ego")
             .attr("transform", (d) -> "translate(" + d.x + "," + d.y + ")")
-
-        console.log(@dom, @egoChart)
 
         @egoCircles = @egoChart.append("circle")
             .attr("r", (d) -> d.r)
@@ -139,7 +135,7 @@ class BubbleGraph
     selectWeek: (selected_week) ->
         @force.nodes().forEach((d) ->
             d.radius = d.week_groups?.get(selected_week)?.length
-            d.r = d.radius * 10
+            d.r = d.radius? * 10
         )
 
         @force
@@ -149,7 +145,7 @@ class BubbleGraph
         @egoCircles
             .transition()
             .duration(200)
-            .attr("r", (d) -> d.radius? * 10)
+            .attr("r", (d) -> d.r)
 
         # Display texts if radius is not zero
         @egoTitles
