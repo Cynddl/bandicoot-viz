@@ -1,3 +1,70 @@
+class Timeline
+    constructor: (data, domains, bin_spacing=50, bin_width=10) ->
+        @bin_spacing = bin_spacing
+        @bin_width = bin_width
+        @domains = domains
+
+        @dom = null
+
+        @timeAxis_padding = 20
+
+        @data = data
+        [first_data, ..., last_data] = data
+
+        @first_week = new Date(first_data.key)
+        @last_week  = new Date(last_data.key)        
+
+        # Time scale
+        @time = d3.time.scale()
+            .domain([@first_week, @last_week])
+            .range([0, @bin_spacing * @data.length])
+
+        # Vertical scale
+        @y = d3.scale.linear()
+            .domain([0, d3.max(@data, (d) -> d.values)])
+            .range([@domains[1][0], @domains[1][1]])
+
+        @timeAxis = d3.svg.axis()
+            .scale(@time)
+            .orient("bottom")
+            .ticks(d3.time.weeks)
+            .tickFormat(d3.time.format("%a %d"))
+
+    render: (svg, id='#timeline') ->
+        @dom = svg.append("g")
+            .attr("id", id)
+            .attr("class", "timeline")
+
+        @dom.append("g")
+            .attr("class", "time axis")
+            .attr("transform", "translate(0," + (@domains[1][0] - @timeAxis_padding) + ")")
+            .call(@timeAxis)
+
+        # Render bars
+        @bar = @dom.selectAll(".bar")
+            .data(@data)
+            .enter().append("g")
+            .attr("class", "bar")
+            .attr("transform", (d) => "translate(" + @time(new Date(d.key)) + "," + @y(d.values) + ")")
+
+        @bar.append("rect")
+            .attr("x", - @bin_width / 2)
+            .attr("width", @bin_width)
+            .attr("height", (d) => @domains[1][0] - @timeAxis_padding - @y(d.values))
+
+    selectBar: (id, duration=200) ->
+        @dom.selectAll('.bar')
+            .attr("class", (d, i) -> if i == id then "bar selected" else "bar")
+
+        @dom
+            .transition()
+            .ease("sin")
+            .duration(duration)
+            .attr("transform", "translate(" + (width / 2 - @time(new Date(@data[id].key))) + ", 0)")
+
+
+
+
 dimension_window = () ->
     w = window
     d = document
@@ -46,60 +113,14 @@ d3.csv "data/big_sample.csv", (events) ->
         .rollup((a) -> d3.sum(a, (d) -> 1))
         .entries(events)
 
-    #
-    # Histogram
-    #
 
-    timeline = svg.append("g")
-        .attr("class", "timeline")
-
-    [first_week, ..., last_week] = nested_data
-
-    time = d3.time.scale()
-        .domain([new Date(first_week.key), new Date(last_week.key)])
-        .range([0, 50 * nested_data.length])
-
-    y = d3.scale.linear()
-        .domain([0, d3.max(nested_data, (d) -> d.values)])
-        .range([height, height - hist_height])
-
-    bar = timeline.selectAll(".bar")
-        .data(nested_data)
-        .enter().append("g")
-        .attr("class", "bar")
-        .attr("transform", (d) -> "translate(" + time(new Date(d.key)) + "," + y(d.values) + ")")
-
-    bar.append("rect")
-        .attr("x", -bin_width / 2)
-        .attr("width", bin_width)
-        .attr("height", (d) -> height - 3 *margin.bottom - y(d.values))
-
-
-    timeAxis = d3.svg.axis()
-        .scale(time)
-        .orient("bottom")
-        .ticks(d3.time.weeks)
-        .tickFormat(d3.time.format("%a %d"))
-
-    timeline.append("g")
-        .attr("class", "time axis")
-        .attr("transform", "translate(0," + (height - 3* margin.bottom) + ")")
-        .call(timeAxis)
-
-
-    transition_timeline = (i, duration=200) ->
-        timeline.selectAll('.bar')
-            .attr("class", (d, j) -> if i == j then "bar selected" else "bar")
-
-        return timeline
-            .transition()
-            .ease("sin")
-            .duration(duration)
-            .attr("transform", "translate(" + (width / 2 - time(new Date(nested_data[i].key))) + ", 0)")
+    ## Histogram
+    timeline = new Timeline nested_data, [[0, width], [height, height - 200]]
+    timeline.render svg
 
     selected_week_id = nested_data.length // 2
     selected_week = new Date(nested_data[selected_week_id].key)
-    transition_timeline(selected_week_id, 0)
+    timeline.selectBar selected_week_id
 
 
     #
@@ -107,8 +128,6 @@ d3.csv "data/big_sample.csv", (events) ->
     #
 
     fill = d3.scale.category20c()
-
-    #weekly_events = events.filter((d) -> d3.time.week(d.date).valueOf() != selected_week.valueOf())
 
     ego = d3.nest()
         .key((d) -> if d.sender == "me" then d.receiver else d.sender)
@@ -171,8 +190,7 @@ d3.csv "data/big_sample.csv", (events) ->
 
         selected_week = new Date(nested_data[selected_week_id].key)
         
-        transition_timeline(selected_week_id)
-
+        timeline.selectBar selected_week_id
 
         force.nodes().forEach((d) ->
             d.radius = d.week_groups?.get(selected_week)?.length
