@@ -1,0 +1,10 @@
+{
+	"events": [
+		{"type": "sms", "date": "2014-04-21T10:42:42", "sender": "me", "receiver": "John Doe"},
+		{"type": "call", "date": "2014-04-15T11:42:42", "sender": "Tata Roberte", "receiver": "me"},
+		{"type": "call", "date": "2014-04-14T08:42:42", "sender": "Tata Roberte", "receiver": "me"},
+		{"type": "sms", "date": "2014-04-02T10:42:42", "sender": "me", "receiver": "John Doe"},
+		{"type": "call", "date": "2014-04-01T11:42:42", "sender": "Tata Roberte", "receiver": "me"},
+		{"type": "call", "date": "2014-03-10T08:42:42", "sender": "Tata Roberte", "receiver": "me"}
+	]
+}
