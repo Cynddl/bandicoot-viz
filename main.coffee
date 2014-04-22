@@ -153,6 +153,54 @@ class BubbleGraph
 
 
 
+class Histogram
+    constructor: (data, domains) ->
+        @domains = domains
+        @height = @domains[1][1] - @domains[1][0]
+
+        # Horizontal scale
+        @x = d3.scale.linear()
+            .domain([0, 1])
+            .range(@domains[0])
+
+        @data = d3.layout.histogram()
+            .bins(@x.ticks(20)) (data)
+
+        # Vertical scale
+        @y = d3.scale.linear()
+            .domain(d3.extent(@data, (d) -> d.y))
+            .range([d3.max(domains[1]), d3.min(domains[1])])
+
+
+        # Bottom axis
+        @xAxis = d3.svg.axis()
+            .scale(@x)
+            .orient("bottom")
+
+    render : (svg) ->
+        @dom = svg.append("g")
+            .attr("class", "histogram")
+
+        line = d3.svg.line()
+            .interpolate("basis")
+            .x((d) => @x(d.x))
+            .y((d) => @y(d.y))
+
+        @dom.append("path")
+            .datum(@data)
+            .attr("class", "line")
+            .attr("d", line)
+
+        @dom.selectAll(".point")
+            .data(@data)
+            .enter().append("circle")
+            .attr("class", "dot")
+            .attr("cx", (d) => @x(d.x))
+            .attr("cy", (d) => @y(d.y))
+            .attr("r", 3)
+
+
+
 dimension_window = () ->
     w = window
     d = document
@@ -202,8 +250,8 @@ d3.csv "data/big_sample.csv", (events) ->
         .entries(events)
 
 
-    ## Histogram
-    timeline = new Timeline nested_data, [[0, width], [height, height - 200]]
+    ## Timeline at the bottom of the window
+    timeline = new Timeline nested_data, [[0, width], [height, height - 100]]
     timeline.render svg
 
     selected_week_id = nested_data.length // 2
@@ -216,6 +264,16 @@ d3.csv "data/big_sample.csv", (events) ->
     ego_graph = new BubbleGraph events, [[50, 550], [50, 550]], selected_week
     ego_graph.render svg, fill
     
+
+    ## Histograms
+    random_values = d3.range(1000).map(d3.random.bates(10))
+    hist = new Histogram random_values, [[600, 900], [100, 150]]
+    hist.render svg
+
+    random_values = d3.range(1000).map(d3.random.bates(10))
+    hist = new Histogram random_values, [[600, 900], [250, 300]]
+    hist.render svg
+
 
     ## Update
     d3.select('body').on("keydown", () ->
