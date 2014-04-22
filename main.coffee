@@ -52,7 +52,7 @@ class Timeline
             .attr("width", @bin_width)
             .attr("height", (d) => @domains[1][0] - @timeAxis_padding - @y(d.values))
 
-    selectBar: (id, duration=200) ->
+    selectWeek: (id, duration=200) ->
         @dom.selectAll('.bar')
             .attr("class", (d, i) -> if i == id then "bar selected" else "bar")
 
@@ -62,6 +62,98 @@ class Timeline
             .duration(duration)
             .attr("transform", "translate(" + (width / 2 - @time(new Date(@data[id].key))) + ", 0)")
 
+
+
+class BubbleGraph
+    constructor: (events, domains, selected_week) ->
+        @domains = domains
+        @width = @domains[0][1] - @domains[0][0]
+        @height = @domains[1][1] - @domains[1][0]
+
+        @events = events
+
+        @ego = d3.nest()
+            .key((d) -> if d.sender == "me" then d.receiver else d.sender)
+            .entries(@events)
+
+        weekly_nest = d3.nest()
+            .key((d) -> d3.time.week(d.date))
+
+        @ego.forEach((d) ->
+            d.week_groups = weekly_nest.map(d.values, d3.map)
+            d.radius = d.week_groups.get(selected_week)?.length)
+
+
+        @bubble = d3.layout.pack()
+            .value((d) -> d.week_groups.get(selected_week)?.length)
+            .sort(null)
+            .padding(50)
+            .radius((d) -> d * 10)
+            .size([500, 500])
+
+        @bubbleNodes = @bubble.nodes( children: @ego )
+
+        @force = d3.layout.force()
+            .nodes(@bubbleNodes)
+            .size([500, 500])
+            .charge((d) -> if d.radius then -Math.pow(d.radius, 1) * 50 else 0)
+            .on("tick", @tick)
+
+        @egoChart = null
+
+
+    render: (svg, fill, id='#bubble') ->
+        console.log "Rendering"
+
+        @dom = svg.append("g")
+            .attr("id", id)
+            .attr("class", "timeline")
+
+        @egoChart = @dom.selectAll(".ego")
+            .data(@bubbleNodes)
+            .enter().append("g")
+            .attr("class", "ego")
+            .attr("transform", (d) -> "translate(" + d.x + "," + d.y + ")")
+
+        console.log(@dom, @egoChart)
+
+        @egoCircles = @egoChart.append("circle")
+            .attr("r", (d) -> d.r)
+            .attr("opacity", 0.4)
+            .style("fill", (d) -> d.key && fill(d.key) || "none" )
+
+        @egoTitles = @egoChart.append("text")
+            .attr("text-anchor", "left")
+            .attr("dy", ".3em")
+            .text((d) -> if (d.key && d.r > 0) then d.key.substring(0, 5))
+
+        @force.start()
+
+
+    tick: =>
+        @egoChart
+            .data(@bubbleNodes)
+            .attr("transform", (d) -> "translate(" + d.x + "," + d.y + ")")
+
+
+    selectWeek: (selected_week) ->
+        @force.nodes().forEach((d) ->
+            d.radius = d.week_groups?.get(selected_week)?.length
+            d.r = d.radius * 10
+        )
+
+        @force
+            .charge((d) -> if d.radius then -Math.pow(d.radius, 1) * 50 else 0)
+            .start()
+
+        @egoCircles
+            .transition()
+            .duration(200)
+            .attr("r", (d) -> d.radius? * 10)
+
+        # Display texts if radius is not zero
+        @egoTitles
+            .text((d) -> if (d.key && d.r > 0) then d.key.substring(0, 5))
 
 
 
@@ -120,66 +212,16 @@ d3.csv "data/big_sample.csv", (events) ->
 
     selected_week_id = nested_data.length // 2
     selected_week = new Date(nested_data[selected_week_id].key)
-    timeline.selectBar selected_week_id
+    timeline.selectWeek selected_week_id
 
 
-    #
-    # Ego network
-    #
-
+    ## Ego network
     fill = d3.scale.category20c()
+    ego_graph = new BubbleGraph events, [[50, 550], [50, 550]], selected_week
+    ego_graph.render svg, fill
+    
 
-    ego = d3.nest()
-        .key((d) -> if d.sender == "me" then d.receiver else d.sender)
-        .entries(events)
-
-    weekly_nest = d3.nest()
-        .key((d) -> d3.time.week(d.date))
-
-
-    ego.forEach((d) ->
-        d.week_groups = weekly_nest.map(d.values, d3.map)
-        d.radius = d.week_groups.get(selected_week)?.length
-    )
-
-
-    bubble = d3.layout.pack()
-        .value((d) -> d.week_groups.get(selected_week)?.length)
-        .sort(null)
-        .padding(50)
-        .radius((d) -> d * 10)
-        .size([500, 500])
-
-    bubbleNodes = bubble.nodes( children: ego )
-
-    egoChart = svg.selectAll(".ego")
-        .data(bubbleNodes)
-        .enter().append("g")
-        .attr("class", "ego")
-        .attr("transform", (d) -> "translate(" + d.x + "," + d.y + ")")
-
-    egoCircles = egoChart.append("circle")
-     .attr("r", (d) -> d.r)
-     .attr("opacity", 0.4)
-     .style("fill", (d) -> d.key && fill(d.key) || "none" )
-
-    egoTitles = egoChart.append("text")
-        .attr("text-anchor", "left")
-        .attr("dy", ".3em")
-        .text((d) -> if (d.key && d.r > 0) then d.key.substring(0, 5))
-
-    tick = () ->
-        egoChart
-            .data(bubbleNodes)
-            .attr("transform", (d) -> "translate(" + d.x + "," + d.y + ")")
-
-    force = d3.layout.force()
-        .nodes(bubbleNodes)
-        .size([500, 500])
-        .charge((d) -> if d.radius then -Math.pow(d.radius, 1) * 50 else 0)
-        .on("tick", tick)
-        .start()
-
+    ## Update
     d3.select('body').on("keydown", () ->
         key = d3.event.keyCode
 
@@ -190,23 +232,6 @@ d3.csv "data/big_sample.csv", (events) ->
 
         selected_week = new Date(nested_data[selected_week_id].key)
         
-        timeline.selectBar selected_week_id
-
-        force.nodes().forEach((d) ->
-            d.radius = d.week_groups?.get(selected_week)?.length
-            d.r = d.radius * 10
-        )
-
-        force
-            .charge((d) -> if d.radius then -Math.pow(d.radius, 1) * 50 else 0)
-            .start()
-
-        egoCircles
-            .transition()
-            .duration(200)
-            .attr("r", (d) -> d.radius * 10)
-
-        egoTitles
-            .text((d) -> if (d.key && d.r > 0) then d.key.substring(0, 5))
+        timeline.selectWeek selected_week_id
+        ego_graph.selectWeek selected_week
     )
-
