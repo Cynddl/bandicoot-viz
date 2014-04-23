@@ -9,18 +9,21 @@
 		html, body {
 			margin: 0;
 			padding: 0;
+
+			background-color: #aaa;
 		}
 
 		.timeline .bar rect {
-			fill: #037283;
+			fill: #bbb;
 		}
 
 		.timeline .bar.selected rect {
-			fill: red;
+			fill: #fff;
 		}
 
 		.axis, .ego {
 			font: 11px Helvetica, sans;
+			fill: #fff;
 		}
 
 		.axis path, .axis line {
@@ -28,6 +31,26 @@
 			stroke: none;
 			/*shape-rendering: crispEdges;*/
 		}
+
+		.histogram .line {
+			fill: none;
+			stroke-width: 2px;
+			stroke: #ddd;
+		}
+
+		.histogram .dot {
+			stroke: #ddd;
+			stroke-width: 2px;
+			fill: none;
+			opacity: 0.3;
+		}
+
+		.histogram .title {
+			font: 11px Helvetica, sans;
+			fill: #fff;
+			text-transform: uppercase;
+		}
+
 	</style>
 	<script type="text/javascript" src="main.js"></script>
 </body>

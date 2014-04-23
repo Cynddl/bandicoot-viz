@@ -156,6 +156,7 @@ class BubbleGraph
 class Histogram
     constructor: (data, domains) ->
         @domains = domains
+        @width = @domains[0][1] - @domains[0][0]
         @height = @domains[1][1] - @domains[1][0]
 
         # Horizontal scale
@@ -177,9 +178,21 @@ class Histogram
             .scale(@x)
             .orient("bottom")
 
-    render : (svg) ->
+    render : (svg, title='Truc') ->
         @dom = svg.append("g")
             .attr("class", "histogram")
+
+        @dom.append("text")
+            .attr("class", "title")
+            .attr("transform", "translate(#{@domains[0][0]}, #{@domains[1][0]})")
+            .text(title)
+
+        # @dom.append("rect")
+        #     .attr("class", "background")
+        #     .attr("width", @width + 10)
+        #     .attr("height", @height + 10)
+        #     .attr("x", @x(0) - 5)
+        #     .attr("y", @domains[1][0] - 5)
 
         line = d3.svg.line()
             .interpolate("basis")
@@ -191,7 +204,7 @@ class Histogram
             .attr("class", "line")
             .attr("d", line)
 
-        @dom.selectAll(".point")
+        points = @dom.selectAll(".point")
             .data(@data)
             .enter().append("circle")
             .attr("class", "dot")
@@ -199,6 +212,13 @@ class Histogram
             .attr("cy", (d) => @y(d.y))
             .attr("r", 3)
 
+        repeat = () ->
+            points
+                .transition()
+                .duration(500)
+                .style("opacity", (d) -> Math.random() * 0.8 + 0.2)
+                .each("end", repeat)
+        repeat()
 
 
 dimension_window = () ->
@@ -268,11 +288,11 @@ d3.csv "data/big_sample.csv", (events) ->
     ## Histograms
     random_values = d3.range(1000).map(d3.random.bates(10))
     hist = new Histogram random_values, [[600, 900], [100, 150]]
-    hist.render svg
+    hist.render svg, "Inter-events"
 
-    random_values = d3.range(1000).map(d3.random.bates(10))
+    random_values = d3.range(1000).map(d3.random.bates(1))
     hist = new Histogram random_values, [[600, 900], [250, 300]]
-    hist.render svg
+    hist.render svg, "Diversity"
 
 
     ## Update
