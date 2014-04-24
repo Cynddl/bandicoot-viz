@@ -297,6 +297,8 @@ dimension_window = () ->
 
 # SVG element (full-size)
 [width, height] = dimension_window()
+width = width * 0.7 # Left panel
+
 svg = d3.select("body").append("svg")
     .attr("width", width)
     .attr("height", height)

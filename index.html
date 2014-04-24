@@ -7,6 +7,7 @@
 		html, body {
 			margin: 0;
 			padding: 0;
+			height: 100%;
 
 			background-color: #aaa;
 		}
@@ -58,9 +59,52 @@
 			font-size: 15px;
 		}
 
+		/* Left panel */
+
+		.panel.left {
+			width: 300px;
+			height: 100%;
+			float: left;
+			background-color: #eee;
+
+			font: 12px Helvetica, sans;
+		}
+
+		.panel p, .panel h2, .panel form {
+			padding: 10px 30px;
+		}
+
+		.panel form input {
+			display: block;
+		}
+
+		svg {
+			float: right;
+		}
+
+
 	</style>
 </head>
 <body>
+
+	<div class="left panel">
+		<h2>Bandicoot toolbox</h2>
+		<p>
+			This demo from the MIT Media Lab shows how metadata can be safely used at large-scale through openPDS/SafeAnswers (http://openpds.media.mit.edu). The data is collected using the FUNF framework (http://funf.org) and the metadata processing through the bandicoot toolbox (http://bandicoot.mit.edu).
+		</p>
+		<p>
+			This application will collect mobile phone metadata (call and text logs with first name of the contact) and upload them to a secure MIT server. The data can then be displayed by entering the unique pin onto the demo screen. The data will only be used for display purposes and will be deleted one week after has been uploaded.
+		</p>
+
+		<form method="GET" action="#">
+			<label for="pin">PIN
+				<input id="pin" name="pin">
+			</label>
+			
+			<input type="submit">
+		</form>
+	</div>
+
 	<script type="text/javascript" src="main.js"></script>
 </body>
 
