@@ -9,19 +9,21 @@ class Timeline
         @timeAxis_padding = 20
 
         @data = data
-        [first_data, ..., last_data] = data
+        @data_keys = @data.keys().sort(d3.ascending)
+        [first_data, ..., last_data] = @data_keys
 
-        @first_week = new Date(first_data.key)
-        @last_week  = new Date(last_data.key)        
+
+        @first_week = new Date(first_data)
+        @last_week  = new Date(last_data)        
 
         # Time scale
         @time = d3.time.scale()
             .domain([@first_week, @last_week])
-            .range([0, @bin_spacing * @data.length])
+            .range([0, @bin_spacing * @data_keys.length])
 
         # Vertical scale
         @y = d3.scale.linear()
-            .domain([0, d3.max(@data, (d) -> d.values)])
+            .domain([0, d3.max(@data.values(), (d) -> d.number_of_interactions)])
             .range([@domains[1][0] - @timeAxis_padding, @domains[1][1]])
 
         @timeAxis = d3.svg.axis()
@@ -42,52 +44,47 @@ class Timeline
 
         # Render bars
         @bar = @dom.selectAll(".bar")
-            .data(@data)
+            .data(@data.entries())
             .enter().append("g")
             .attr("class", "bar")
-            .attr("transform", (d) => "translate(" + @time(new Date(d.key)) + "," + @y(d.values) + ")")
+            .attr("transform", (d) => "translate(" + @time(new Date(d.key)) + "," + @y(d.value.number_of_interactions) + ")")
 
         @bar.append("rect")
             .attr("x", - @bin_width / 2)
             .attr("width", @bin_width)
-            .attr("height", (d) => @domains[1][0] - @timeAxis_padding - @y(d.values))
+            .attr("height", (d) => @domains[1][0] - @timeAxis_padding - @y(d.value.number_of_interactions))
 
     selectWeek: (id, duration=200) ->
+        key = @data_keys[id]
+        datum = new Date(key)
+
         @dom.selectAll('.bar')
-            .attr("class", (d, i) -> if i == id then "bar selected" else "bar")
+            .attr("class", (d) -> if key == d.key then "bar selected" else "bar")
 
         @dom
             .transition()
             .ease("sin")
             .duration(duration)
-            .attr("transform", "translate(" + (width / 2 - @time(new Date(@data[id].key))) + ", 0)")
+            .attr("transform", "translate(" + (width / 2 - @time(datum)) + ", 0)")
 
 
 
 class BubbleGraph
-    constructor: (events, domains, selected_week) ->
+    constructor: (events, domains, selected_week_id) ->
         @domains = domains
         @width = @domains[0][1] - @domains[0][0]
         @height = @domains[1][1] - @domains[1][0]
 
-        @selected_week = selected_week
-
         @events = events
+        @events_keys = @events.keys()
 
-        @ego = d3.nest()
-            .key((d) -> if d.sender == "me" then d.receiver else d.sender)
-            .entries(@events)
+        @selected_week_id = selected_week_id
+        @selected_week_key = @events_keys[selected_week_id]
+        
 
-        weekly_nest = d3.nest()
-            .key((d) -> d3.time.week(d.date))
-
-        @ego.forEach((d) ->
-            d.week_groups = weekly_nest.map(d.values, d3.map)
-            d.radius = d.week_groups.get(@selected_week)?.length)
-
+        @ego = d3.map(@events.get(@selected_week_key).events).entries()
 
         @bubble = d3.layout.pack()
-            .value((d) -> d.week_groups.get(@selected_week)?.length)
             .sort(null)
             .padding(50)
             .radius((d) -> d)
@@ -96,12 +93,9 @@ class BubbleGraph
         @bubbleNodes = @bubble.nodes( children: @ego )
 
         @force = d3.layout.force()
-            .nodes(@bubbleNodes)
+            .nodes(@bubbleNodes.filter((d) -> !d.children))
             .size([500, 500])
-            .charge((d) -> if d.radius then -Math.pow(d.radius, 0.5) * 30 else 0)
             .on("tick", @tick)
-
-        @egoChart = null
 
 
     render: (svg, fill, id='#bubble') ->
@@ -116,16 +110,16 @@ class BubbleGraph
             .attr("transform", (d) -> "translate(" + d.x + "," + d.y + ")")
 
         @egoCircles = @egoChart.append("circle")
-            .attr("r", (d) -> if d.radius then 5*Math.log(d.radius))
             .attr("opacity", 0.4)
             .style("fill", (d) -> d.key && fill(d.key) || "none" )
 
         @egoTitles = @egoChart.append("text")
             .attr("text-anchor", "left")
             .attr("dy", ".3em")
-            .text((d) -> if (d.key && d.r > 0) then d.key.substring(0, 10))
+            .attr("dx", ".8em")
 
-        @force.start()
+        # Update graph
+        this.selectWeek @selected_week_id
 
 
     tick: =>
@@ -134,37 +128,31 @@ class BubbleGraph
             .attr("transform", (d) -> "translate(" + d.x + "," + d.y + ")")
 
 
-    selectWeek: (selected_week) ->
-        @selected_week = selected_week
-        @force.nodes().forEach((d) =>
-            d.radius = d.week_groups?.get(@selected_week)?.length
-            d.r = if d.radius then 5*Math.log(d.radius) else undefined
-        )
+    selectWeek: (selected_week_id) ->
+        @selected_week_id = selected_week_id
+        @selected_week_key = @events_keys[@selected_week_id]
+
+        weekly_events = @events.get(@selected_week_key).events
+
+        @force.nodes().forEach (d) ->
+            d.value = weekly_events[d.key]
+            d.r = d.value
 
         @force
-            .charge((d) -> if d.radius then -Math.pow(d.radius, 0.5) * 50 else 0)
+            .charge((d) -> -d.r * 50)
             .start()
 
         @egoCircles
             .transition()
             .duration(200)
-            .attr("r", (d) -> d.r)
+            .attr("r", (d) -> d.r * 5)
 
         # Display texts if radius is not zero
         @egoTitles
-            .text((d) -> if (d.key && d.r > 0) then d.key.substring(0, 10))
-
-    unique_contacts: () ->
-        return @force.nodes()
-            .filter((d) -> d.radius?)
-            .length
-
-    interactions: () ->
-        list_interactions = @force.nodes()
-            .map((d) -> d.radius)
-        return d3.sum(list_interactions)
-            
-
+            .transition()
+            .duration(200)
+            .attr("opacity", (d) -> if d.key && d.r > 0 then 1 else 0)
+            .text((d) -> if d.key && d.r > 0 then d.key.substring(0, 10))
 
 
 class Histogram
@@ -313,98 +301,90 @@ svg = d3.select("body").append("svg")
     .attr("width", width)
     .attr("height", height)
 
-# Header
+
+# URL parameters
+getParams = ->
+  query = window.location.search.substring(1)
+  raw_vars = query.split("&")
+  params = {}
+
+  for v in raw_vars
+    [key, val] = v.split("=")
+    params[key] = decodeURIComponent(val)
+
+  params
+
+params = getParams()
+pin = params['pin']
 
 
 
-hist_height = 100
-bin_width = 10
-margin = left: 10, right: 10, bottom: 10, top: 10
+# Load metadata
+d3.json "http://socialmetadata.linkedpersonaldata.org/bandicoot/pin/#{pin}/", (events) ->
 
+    events = d3.map(events)
 
-# Load (random) data
-#d3.json "data/random.json", (data) ->
-#    events = data.events
+    events_keys = events.keys().sort(d3.ascending)
 
-#d3.csv "data/daily_calls_ID_conv.csv", (events) ->
-d3.csv "data/daily_SMS_log.csv", (events) ->
-
-    #me = "37349f07c95879abf625e8e7ae56170c"
-    me = "FA10-01-05"
-
-    events = events.filter((d) -> d.caller_id == me or d.callee_id == me)
-
-    events.forEach((d) ->
-        d.date = new Date(d.date)
-        if d.caller_id == me
-            d.sender = "me"
-            d.receiver = d.callee_id
-        else
-            d.sender = d.caller_id
-            d.receiver = "me"
-    )
-
-
-    events = events.sort((d) -> d.date)
-    nested_data = d3.nest()
-        .key((d) -> new Date(d3.time.week(d.date)))
-        .sortKeys((a, b) -> new Date(a).valueOf() - new Date(b).valueOf())
-        .rollup((a) -> d3.sum(a, (d) -> 1))
-        .entries(events)
+    me = "37349f07c95879abf625e8e7ae56170c"
 
     ## Timeline at the bottom of the window
-    timeline = new Timeline nested_data, [[0, width], [height, height - 100]]
+    timeline = new Timeline events, [[0, width], [height, height - 100]]
     timeline.render svg
 
-    selected_week_id = nested_data.length // 2
-    selected_week = new Date(nested_data[selected_week_id].key)
+    selected_week_id = events_keys.length // 2
+    selected_week = events_keys[selected_week_id]
     timeline.selectWeek selected_week_id
 
 
     ## Ego network
     fill = d3.scale.category20c()
-    ego_graph = new BubbleGraph events, [[50, 550], [50, 550]], selected_week
+    ego_graph = new BubbleGraph events, [[50, 550], [50, 550]], selected_week_id
     ego_graph.render svg, fill
     
 
-    ## Captions
-    unique_contacts = ego_graph.unique_contacts()
-    nb_contacts = new Caption "Number of contacts", unique_contacts, [[600, 900], [250, 300]]
-    nb_contacts.render svg
+    weekly = events.get(selected_week)
 
-    nb_interactions = new Caption "Number of interactions", ego_graph.interactions(), [[600, 900], [300, 350]]
+    ## Captions
+    caption_entropy = new Caption "Entropy", weekly.entropy, [[700, 900], [250, 300]]
+    caption_entropy.render svg
+
+    nb_interactions = new Caption "Number of interactions", weekly.number_of_interactions, [[700, 900], [300, 350]]
     nb_interactions.render svg
 
-    week_format = (w) -> 
-        d3.time.format("%a. %d")(w) + " - " + d3.time.format("%a. %d (%b. %Y)")(d3.time.monday(w))
+    percent_initiated = new Caption "% initiated", d3.format("%")(weekly.percent_initiated), [[700, 900], [350, 400]]
+    percent_initiated.render svg
 
-    week_caption = new Caption "week", week_format(selected_week), [[600, 900], [50, 100]]
+    week_format = (w) -> 
+        d3.time.format("%a. %d (%b. %Y)")(d3.time.monday(w))
+
+    week_caption = new Caption "week", week_format(new Date(selected_week)), [[700, 900], [50, 100]]
     week_caption.render svg
     
 
 
-    ## Histograms
-    inter_events_week = (events, week) ->
-        events_week = events
-            .filter((d) -> d3.time.week(d.date).valueOf() == selected_week.valueOf())
-            .sort((a, b) -> a.date.valueOf() - b.date.valueOf())
+    # ## Histograms
+    # inter_events_week = (events, week) ->
+    #     events_week = events
+    #         .filter((d) -> d3.time.week(d.date).valueOf() == selected_week.valueOf())
+    #         .sort((a, b) -> a.date.valueOf() - b.date.valueOf())
 
-        inter_events = events_week
-            .map((d, i) ->
-                (d.date.valueOf() - events_week[i-1]?.date.valueOf()) / 1000)
-            .filter((d) -> d > 0)
-            .sort(d3.ascending)
+    #     inter_events = events_week
+    #         .map((d, i) ->
+    #             (d.date.valueOf() - events_week[i-1]?.date.valueOf()) / 1000)
+    #         .filter((d) -> d > 0)
+    #         .sort(d3.ascending)
         
-        return inter_events
+    #     return inter_events
 
-    # Histograms
-    inter_events = inter_events_week events, selected_week
-    hist_1 = new Histogram inter_events, [[600, 900], [100, 150]]
-    hist_1.render svg, "Inter-events", "interevents"
+    # # Histograms
+    # inter_events = inter_events_week events, selected_week
+    # hist_1 = new Histogram inter_events, [[700, 900], [100, 150]]
+    # hist_1.render svg, "Inter-events", "interevents"
 
-    # random_values = d3.range(1000).map(d3.random.bates(1))
-    # hist_2 = new Histogram random_values, [[600, 900], [250, 300]]
-    # hist_2.render svg, "Diversity", "diversity"
+    # # random_values = d3.range(1000).map(d3.random.bates(1))
+    # # hist_2 = new Histogram random_values, [[700, 900], [250, 300]]
+    # # hist_2.render svg, "Diversity", "diversity"
 
 
     ## Update
@@ -413,20 +393,22 @@ d3.csv "data/daily_SMS_log.csv", (events) ->
 
         if key == 37 and selected_week_id > 0
             selected_week_id -= 1
-        else if key == 39 and selected_week_id < nested_data.length - 1
+        else if key == 39 and selected_week_id < events_keys.length - 1
             selected_week_id += 1
 
-        selected_week = new Date(nested_data[selected_week_id].key)
-        
+        selected_week = events_keys[selected_week_id]
         timeline.selectWeek selected_week_id
-        ego_graph.selectWeek selected_week
+        ego_graph.selectWeek selected_week_id
 
 
         # Update inter-events
-        inter_events = inter_events_week(events, selected_week)
-        hist_1.update inter_events
+        # inter_events = inter_events_week(events, selected_week)
+        # hist_1.update inter_events
 
         # Update captions
-        nb_contacts.update ego_graph.unique_contacts()
-        nb_interactions.update ego_graph.interactions()
+        weekly = events.get(selected_week)
+        caption_entropy.update weekly.entropy
+        nb_interactions.update weekly.number_of_interactions
+        week_caption.update week_format(new Date(selected_week))
+        percent_initiated.update d3.format("%")(weekly.percent_initiated)
     )
